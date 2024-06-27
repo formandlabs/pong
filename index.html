@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gun.js Pong with Scoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+    <style>
+        canvas { border: 1px solid black; }
+    </style>
+</head>
+<body>
+    <canvas id="pongCanvas" width="600" height="400"></canvas>
+    <div id="playerInfo"></div>
+    <script>
+        const gun = Gun(['https://gun-manhattan.herokuapp.com/gun']);
+        const game = gun.get('pong-game');
+
+        const canvas = document.getElementById('pongCanvas');
+        const ctx = canvas.getContext('2d');
+        const playerInfo = document.getElementById('playerInfo');
+
+        const paddleHeight = 100;
+        const paddleWidth = 10;
+        const ballRadius = 5;
+
+        let leftPaddleY = (canvas.height - paddleHeight) / 2;
+        let rightPaddleY = (canvas.height - paddleHeight) / 2;
+        let ballX = canvas.width / 2;
+        let ballY = canvas.height / 2;
+        let ballSpeedX = 2;
+        let ballSpeedY = 2;
+        let leftScore = 0;
+        let rightScore = 0;
+
+        const isLeftPlayer = window.location.hash === '#left';
+        playerInfo.textContent = isLeftPlayer ? "You're controlling the left paddle" : "You're controlling the right paddle";
+
+        function drawPaddle(x, y) {
+            ctx.fillStyle = "black";
+            ctx.fillRect(x, y, paddleWidth, paddleHeight);
+        }
+
+        function drawBall(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, ballRadius, 0, Math.PI * 2);
+            ctx.fillStyle = "black";
+            ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawScore() {
+            ctx.font = "24px Arial";
+            ctx.fillStyle = "black";
+            ctx.fillText(leftScore, canvas.width / 4, 30);
+            ctx.fillText(rightScore, 3 * canvas.width / 4, 30);
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            drawPaddle(0, leftPaddleY);
+            drawPaddle(canvas.width - paddleWidth, rightPaddleY);
+            drawBall(ballX, ballY);
+            drawScore();
+
+            requestAnimationFrame(draw);
+        }
+
+        function updateBall() {
+            if (isLeftPlayer) {
+                ballX += ballSpeedX;
+                ballY += ballSpeedY;
+
+                if (ballY + ballRadius > canvas.height || ballY - ballRadius < 0) {
+                    ballSpeedY = -ballSpeedY;
+                }
+
+                if (
+                    (ballX - ballRadius < paddleWidth && ballY > leftPaddleY && ballY < leftPaddleY + paddleHeight) ||
+                    (ballX + ballRadius > canvas.width - paddleWidth && ballY > rightPaddleY && ballY < rightPaddleY + paddleHeight)
+                ) {
+                    ballSpeedX = -ballSpeedX;
+                }
+
+                if (ballX + ballRadius > canvas.width) {
+                    leftScore++;
+                    game.get('score').put({ left: leftScore, right: rightScore });
+                    resetBall();
+                } else if (ballX - ballRadius < 0) {
+                    rightScore++;
+                    game.get('score').put({ left: leftScore, right: rightScore });
+                    resetBall();
+                }
+
+                game.get('ball').put({x: ballX, y: ballY});
+            }
+            setTimeout(updateBall, 16); // Roughly 60fps
+        }
+
+        function resetBall() {
+            ballX = canvas.width / 2;
+            ballY = canvas.height / 2;
+            ballSpeedX = -ballSpeedX;
+            ballSpeedY = Math.random() > 0.5 ? 2 : -2;
+        }
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseY = e.clientY - rect.top - paddleHeight / 2;
+            
+            if (mouseY >= 0 && mouseY <= canvas.height - paddleHeight) {
+                if (isLeftPlayer) {
+                    leftPaddleY = mouseY;
+                    game.get('leftPaddle').put({y: leftPaddleY});
+                } else {
+                    rightPaddleY = mouseY;
+                    game.get('rightPaddle').put({y: rightPaddleY});
+                }
+            }
+        });
+
+        game.get('leftPaddle').on((data) => {
+            if (!isLeftPlayer) {
+                leftPaddleY = data.y;
+            }
+        });
+
+        game.get('rightPaddle').on((data) => {
+            if (isLeftPlayer) {
+                rightPaddleY = data.y;
+            }
+        });
+
+        game.get('ball').on((data) => {
+            if (!isLeftPlayer) {
+                ballX = data.x;
+                ballY = data.y;
+            }
+        });
+
+        game.get('score').on((data) => {
+            leftScore = data.left;
+            rightScore = data.right;
+        });
+
+        draw();
+        updateBall();
+    </script>
+</body>
+</html>
